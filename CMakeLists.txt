@@ -54,4 +54,4 @@ set(INCLUDE_PATHS
         )
 include_directories(${INCLUDE_PATHS})
 
-add_executable(myp main.c tray.h)
+add_executable(myp main.c tray.h pulse.c pulse.h)

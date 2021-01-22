@@ -1,8 +1,7 @@
 #include <stdio.h>
 #include <string.h>
-#include <pulse/pulseaudio.h>
+#include "pulse.h"
 
-#define _(x) x
 
 #if defined (_WIN32) || defined (_WIN64)
 #define TRAY_WINAPI 1
@@ -92,76 +91,8 @@ static struct tray tray = {
                 {.text = NULL}},
 };
 
-void show_error(char *s) {
-    fprintf(stderr, "%s\n", s);
-}
-
-
-void source_cb(pa_context *c, const pa_source_info *i, int eol, void *userdata) {
-    if (eol > 0) {
-        return;
-    }
-
-    printf("Source: name %s, description %s\n", i->name, i->description);
-    // print_properties(i->proplist);
-}
-
-
-void context_state_cb(pa_context *c, void *userdata) {
-
-    switch (pa_context_get_state(c)) {
-        case PA_CONTEXT_UNCONNECTED:
-        case PA_CONTEXT_CONNECTING:
-        case PA_CONTEXT_AUTHORIZING:
-        case PA_CONTEXT_SETTING_NAME:
-            break;
-
-        case PA_CONTEXT_READY: {
-            pa_operation *o;
-
-            if (!(o = pa_context_get_source_info_list(c,
-                                                      source_cb,
-                                                      NULL
-            ))) {
-                show_error(_("pa_context_subscribe() failed"));
-                return;
-            }
-            pa_operation_unref(o);
-
-            break;
-        }
-
-        case PA_CONTEXT_FAILED:
-        case PA_CONTEXT_TERMINATED:
-        default:
-            return;
-    }
-}
-
-
-
-
 int main() {
-
-    int ret;
-
-    // Define our pulse audio loop and connection variables
-    pa_mainloop *pa_ml;
-    pa_mainloop_api *pa_mlapi;
-    pa_context *context;
-
-    // Create a mainloop API and connection to the default server
-    pa_ml = pa_threaded_mainloop_new();
-    pa_threaded_mainloop_start(pa_ml);
-    pa_mlapi = pa_threaded_mainloop_get_api(pa_ml);
-    context = pa_context_new(pa_mlapi, "Device list");
-
-    // This function connects to the pulse server
-    pa_context_connect(context, NULL, 0, NULL);
-
-    // This function defines a callback so the server will tell us its state.
-    pa_context_set_state_callback(context, context_state_cb, NULL);
-
+    pa_init();
 
     if (tray_init(&tray) < 0) {
         printf("failed to create tray\n");
