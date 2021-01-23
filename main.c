@@ -49,7 +49,7 @@ void get_source_cb(pa_context *c, const pa_source_info *i, int eol, void *userda
         return;
     }
     if (i->monitor_of_sink == PA_INVALID_INDEX) {
-        printf("Found mic %s (%s) [%d]\n", i->description, i->name, i->index);
+        g_print("Found mic %s (%s) [%d]\n", i->description, i->name, i->index);
         g_array_append_val(sources, *i);
         GtkWidget *source = gtk_radio_menu_item_new_with_label(sourcesRadio, i->description);
         sourcesRadio = gtk_radio_menu_item_get_group(GTK_RADIO_MENU_ITEM (source));
@@ -74,7 +74,7 @@ void context_state_cb(pa_context *c, void *userdata) {
         case PA_CONTEXT_READY: {
             pa_operation *o;
             if (!(o = pa_context_get_source_info_list(c, get_source_cb, NULL))) {
-                printf("pa_context_subscribe() failed");
+                g_print("pa_context_subscribe() failed");
                 return;
             }
             pa_operation_unref(o);
@@ -125,10 +125,9 @@ _Noreturn void *listener(gpointer data) {
                     pos++;
                     num /= 2;
                 }
-                printf("\n");
             }
         }
-        if (keys_pressed > 0 && !muted) {
+        if (!paused && keys_pressed > 0 && !muted) {
             g_print("%d key pressed in the last %d usecs, muting\n", keys_pressed, KEYBOARD_POLL_INTERVAL_USEC);
             muted = TRUE;
             pa_context_set_source_mute_by_index(pa_ctx, selected_source, 1, set_mute_cb, NULL);
@@ -140,7 +139,33 @@ _Noreturn void *listener(gpointer data) {
 }
 
 
+static void quit (int ret)
+{
+    pa_context_disconnect(pa_ctx);
+    g_main_loop_quit(mainloop);
+}
+
+void quit_callback(GtkMenuItem *menuitem, gpointer data) {
+    g_print("quit_callback()\n");
+    quit(0);
+}
+
+
+void pause_callback(GtkMenuItem *menuitem, gpointer data) {
+    g_print("pause_callback()\n");
+    paused = gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(menuitem));
+    if (paused) {
+        g_print("app paused, unmuting\n");
+        pa_context_set_source_mute_by_index(pa_ctx, selected_source, 0, set_mute_cb, NULL);
+        app_indicator_set_icon(indicator, "audio-input-microphone");
+    } else {
+        g_print("app resumed\n");
+        app_indicator_set_icon(indicator, "microphone-sensitivity-high");
+    }
+}
+
 gint main(gint argc G_GNUC_UNUSED, gchar *argv[] G_GNUC_UNUSED) {
+    paused = FALSE;
     GMainContext *context = NULL;
 
     mainloop = g_main_loop_new(context, FALSE);
@@ -152,9 +177,10 @@ gint main(gint argc G_GNUC_UNUSED, gchar *argv[] G_GNUC_UNUSED) {
 
     app_indicator_set_status(indicator, APP_INDICATOR_STATUS_ACTIVE);
     app_indicator_set_icon(indicator, "microphone-sensitivity-high");
-
-    GtkWidget *pause = gtk_menu_item_new_with_label("Pause");
+    GtkWidget *pause = gtk_check_menu_item_new_with_label("Pause");
+    g_signal_connect (GTK_CHECK_MENU_ITEM(pause), "activate", G_CALLBACK(pause_callback), NULL);
     GtkWidget *quit = gtk_menu_item_new_with_label("Quit");
+    g_signal_connect (GTK_MENU_ITEM(quit), "activate", G_CALLBACK(quit_callback), NULL);
 
     gtk_menu_shell_append(GTK_MENU_SHELL (indicator_menu), pause);
     gtk_menu_shell_append(GTK_MENU_SHELL (indicator_menu), quit);
@@ -167,7 +193,7 @@ gint main(gint argc G_GNUC_UNUSED, gchar *argv[] G_GNUC_UNUSED) {
     pa_context_set_state_callback(pa_ctx, context_state_cb, NULL);
 
     if (pa_context_connect(pa_ctx, NULL, 0, NULL) < 0)
-        fprintf(stderr, "pa_context_connect() failed: %s\n", pa_strerror(pa_context_errno(pa_ctx)));
+        g_error("pa_context_connect() failed: %s\n", pa_strerror(pa_context_errno(pa_ctx)));
 
     app_indicator_set_menu(indicator, GTK_MENU(indicator_menu));
     g_thread_new("keyboardlistener", listener, NULL);
